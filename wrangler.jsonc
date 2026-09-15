@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "skillify-runtime",
+  "main": "src/index.ts",
+  "account_id": "0356d59ccdcff356bf3bbdb580bbaa60",
+  "compatibility_date": "2025-09-01",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "skillify.carbonleft.com", "custom_domain": true }
+  ],
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "skillify_runtime",
+      "database_id": "55808ab1-0303-4b87-98bf-254fffd203c1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CONNECTED_ACCOUNT",
+        "class_name": "ConnectedAccountDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ConnectedAccountDO"]
+    }
+  ]
+  // Secrets (set via `wrangler secret put <NAME>`, never committed):
+  //   KEK_BASE64   - 32-byte AES-GCM root key, base64, wraps each tenant's DEK
+  //   ADMIN_TOKEN  - bearer token for the POST /v1/tenants bootstrap route
+}

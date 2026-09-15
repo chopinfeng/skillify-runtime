@@ -1,0 +1,21 @@
+{
+  "name": "skillify-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "d1:migrate:local": "wrangler d1 migrations apply skillify_runtime --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply skillify_runtime --remote",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250909.0",
+    "@types/node": "^22.20.2",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^3.99.0"
+  }
+}
