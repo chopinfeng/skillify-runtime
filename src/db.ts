@@ -81,6 +81,20 @@ export async function getConnectedAccount(env: Env, accountId: string, tenantId:
   return row ?? null;
 }
 
+/** Used by the MCP tool handlers, which have no connected_account_id
+ * parameter to work with (a plugged-in agent just calls the tool) — falls
+ * back to the tenant's most recently created active account for that
+ * platform, mirroring how Composio resolves "the app is connected" without
+ * the caller naming a specific connection. */
+export async function getMostRecentConnectedAccount(env: Env, tenantId: string, platform: Platform): Promise<ConnectedAccountRow | null> {
+  const row = await env.DB.prepare(
+    "SELECT * FROM connected_accounts WHERE tenant_id = ? AND platform = ? AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1",
+  )
+    .bind(tenantId, platform)
+    .first<ConnectedAccountRow>();
+  return row ?? null;
+}
+
 export async function listConnectedAccounts(env: Env, tenantId: string): Promise<ConnectedAccountRow[]> {
   const { results } = await env.DB.prepare(
     "SELECT * FROM connected_accounts WHERE tenant_id = ? AND revoked_at IS NULL ORDER BY created_at DESC",

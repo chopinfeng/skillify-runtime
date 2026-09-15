@@ -1,9 +1,8 @@
 import type { Env } from "../types";
 import type { TenantRow } from "../db";
-import { getConnectedAccount, insertAuditLog } from "../db";
+import { getConnectedAccount } from "../db";
 import { ACTIONS_BY_NAME } from "../registry";
-import { withRetry } from "../lib/retry";
-import { decryptAccountSecret } from "./accounts";
+import { runAction } from "../lib/run-action";
 
 export async function handleExecute(request: Request, env: Env, tenant: TenantRow): Promise<Response> {
   const body = (await request.json()) as { tool_name?: string; connected_account_id?: string; input?: Record<string, unknown> };
@@ -17,23 +16,7 @@ export async function handleExecute(request: Request, env: Env, tenant: TenantRo
     return Response.json({ error: `${body.tool_name} requires a ${action.tool.platform} account, got ${account.platform}` }, { status: 400 });
   }
 
-  const secret = await decryptAccountSecret(env, tenant, account.encrypted_secret);
-  const startedAt = Date.now();
-  const result = await withRetry(() =>
-    action.execute({ env, accountId: account.id, secret, input: body.input ?? {} }),
-  );
-  const durationMs = Date.now() - startedAt;
-
-  await insertAuditLog(env, {
-    tenantId: tenant.id,
-    accountId: account.id,
-    toolName: action.tool.name,
-    ok: result.ok,
-    httpStatus: result.httpStatus,
-    platformCode: result.platformCode,
-    durationMs,
-  });
-
+  const result = await runAction(env, tenant, account, action, body.input ?? {});
   const status = result.ok ? 200 : result.platformCode === "gateway_validation" ? 400 : 502;
   return Response.json(result, { status });
 }

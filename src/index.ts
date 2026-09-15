@@ -5,6 +5,7 @@ import { handleCreateAccount, handleListAccounts, handleRevokeAccount } from "./
 import { handleListTools } from "./routes/catalog";
 import { handleExecute } from "./routes/execute";
 import { handleAuditLog } from "./routes/audit";
+import { handleMcp } from "./mcp";
 
 export { ConnectedAccountDO } from "./durable-objects/ConnectedAccountDO";
 
@@ -25,6 +26,14 @@ export default {
       // Tool catalog is not tenant-scoped — it's the same for everyone.
       if (method === "GET" && pathname === "/v1/tools") {
         return handleListTools(request);
+      }
+
+      // MCP endpoint — one URL any MCP-compatible agent (Claude, Cursor, …)
+      // can install directly. Auth is the same tenant Bearer API key as the
+      // REST API, but handleMcp checks it itself since it needs the raw
+      // Request, not a pre-resolved tenant, to hand to the MCP handler.
+      if (pathname === "/mcp") {
+        return await handleMcp(request, env);
       }
 
       // Everything else requires a tenant API key.
