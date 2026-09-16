@@ -7,6 +7,8 @@ import { handleExecute } from "./routes/execute";
 import { handleAuditLog } from "./routes/audit";
 import { handleMcp } from "./mcp";
 import { handleLogin, handleLogout, handleMe, handleSignup } from "./routes/auth";
+import { handleCreateApiKey, handleListApiKeys, handleRevokeApiKey } from "./routes/api-keys";
+import { handleConsole } from "./console";
 
 export { ConnectedAccountDO } from "./durable-objects/ConnectedAccountDO";
 
@@ -20,8 +22,14 @@ export default {
       // Public — no auth, no tenant. A bare visit to the domain (or any
       // unrecognized path) should never look like an auth failure.
       if (method === "GET" && pathname === "/") {
-        return Response.json({ service: "skillify-runtime", status: "ok", docs: "https://github.com/chopinfeng/skillify-runtime" });
+        return Response.json({
+          service: "skillify-runtime",
+          status: "ok",
+          console: "https://skillify.carbonleft.com/console",
+          docs: "https://github.com/chopinfeng/skillify-runtime",
+        });
       }
+      if (method === "GET" && pathname === "/console") return handleConsole();
 
       // Admin bootstrap — no tenant exists yet, so this authenticates
       // differently (ADMIN_TOKEN, not a tenant API key).
@@ -50,6 +58,14 @@ export default {
       if (method === "POST" && pathname === "/v1/auth/login") return await handleLogin(request, env);
       if (method === "POST" && pathname === "/v1/auth/logout") return await handleLogout(request, env);
       if (method === "GET" && pathname === "/v1/auth/me") return await handleMe(request, env);
+
+      // API key self-service — also session-gated (the console), not
+      // tenant-API-key-gated: you shouldn't need a key already in hand to
+      // manage your keys.
+      const apiKeyMatch = pathname.match(/^\/v1\/api-keys\/([^/]+)$/);
+      if (method === "POST" && pathname === "/v1/api-keys") return await handleCreateApiKey(request, env);
+      if (method === "GET" && pathname === "/v1/api-keys") return await handleListApiKeys(request, env);
+      if (method === "DELETE" && apiKeyMatch) return await handleRevokeApiKey(request, env, apiKeyMatch[1]);
 
       // Everything past this point requires a tenant API key — but only
       // for paths that actually exist. Match the route shape FIRST so an

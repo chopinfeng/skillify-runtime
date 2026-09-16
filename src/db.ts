@@ -66,6 +66,31 @@ export async function createTenantApiKey(env: Env, tenantId: string): Promise<{ 
   return { id, plaintextKey };
 }
 
+export interface TenantApiKeyRow {
+  id: string;
+  tenant_id: string;
+  created_at: number;
+  revoked_at: number | null;
+}
+
+/** Metadata only — the plaintext key is never persisted, so there's
+ * nothing to list beyond id/created_at/revoked_at. Used by the console's
+ * "your API keys" view. */
+export async function listTenantApiKeys(env: Env, tenantId: string): Promise<TenantApiKeyRow[]> {
+  const { results } = await env.DB.prepare(
+    "SELECT id, tenant_id, created_at, revoked_at FROM tenant_api_keys WHERE tenant_id = ? ORDER BY created_at DESC",
+  )
+    .bind(tenantId)
+    .all<TenantApiKeyRow>();
+  return results;
+}
+
+export async function revokeTenantApiKey(env: Env, id: string, tenantId: string): Promise<void> {
+  await env.DB.prepare("UPDATE tenant_api_keys SET revoked_at = ? WHERE id = ? AND tenant_id = ?")
+    .bind(Date.now(), id, tenantId)
+    .run();
+}
+
 export async function getTenantByApiKey(env: Env, plaintextKey: string): Promise<TenantRow | null> {
   const keyHash = await sha256Hex(plaintextKey);
   const row = await env.DB.prepare(

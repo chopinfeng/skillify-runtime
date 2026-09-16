@@ -11,7 +11,7 @@ Composio 式的托管执行网关 MVP：托管凭证 + 统一 tool-calling 执�
 | `bigmodel-cn` | 静态 API Key，无过期 | `bigmodel_chat_completion` |
 | `feishu` | app 级 `tenant_access_token`，网关自动换取/刷新（`ConnectedAccountDO`） | `feishu_send_message`、`feishu_bitable_batch_create_records` |
 
-明确不做：支付宝/微信支付（涉资金，MVP 不碰）、feishu 三方 `user_access_token` 用户授权跳转（app 级 token 已够用）、计费/控制台 UI/沙箱执行。
+明确不做：支付宝/微信支付（涉资金，MVP 不碰）、feishu 三方 `user_access_token` 用户授权跳转（app 级 token 已够用）、计费/沙箱执行。控制台 UI 已经有了最小版本，见下文。
 
 ## 本地开发
 
@@ -45,6 +45,12 @@ curl -b cookies.txt -X POST localhost:8787/v1/auth/logout
 ```
 
 密码用 PBKDF2-HMAC-SHA256 哈希，**100,000 次迭代**——OWASP 现在推荐 210,000，但 Workers 运行时的 WebCrypto PBKDF2 实现硬性上限就是 100,000（`NotSupportedError`，本地 `wrangler dev` 用的 Miniflare 不会拦，只有部署到真实 Workers 才报错，踩过一次坑，见 `src/lib/password.ts` 注释）。登录失败一律返回同一句 `invalid email or password`，不区分是邮箱不存在还是密码错。这轮没做的：密码重置、邮箱验证、登录失败限流、单设备踢旧 session。
+
+`connected-accounts` / `execute` / `audit-log` 这几个原本只认 tenant API Key 的接口，现在**也**认 session cookie（`lib/auth.ts` 的 `authenticateTenant` 两条认证轨道都试）——这样控制台才能用登录态直接管理自己的 tenant，不用先手动去拿一把 key。
+
+## 控制台
+
+`GET /console` 是一个纯静态 HTML + 原生 JS 页面（零依赖、Worker 直接吐，没有前端构建步骤），登录/注册、管理 connected accounts、管理 API Key、看审计日志、复制 MCP 配置片段都在这一页。API Key 现在可以事后补开：`POST /v1/api-keys`（session 认证，返回一次性明文）、`GET /v1/api-keys`（列出 id/创建时间/是否撤销，不含明文）、`DELETE /v1/api-keys/:id`（撤销）——不然注册时那把一次性 Key 一丢，之前就再也拿不到能用的 Key 了。
 
 ## API 速览
 
@@ -109,7 +115,8 @@ FEISHU_APP_ID=... FEISHU_APP_SECRET=... npm test   # 加上 feishu 真实调用�
 - `KEK_BASE64` 是普通 Worker secret，不是 Cloudflare Secrets Store 资源——先够用，后续要升级路径明确（换成从 Secrets Store 读取即可，`lib/crypto.ts` 的接口不用变）。
 - MCP 侧的账号选择是「同平台下最新一个」，没有多账号显式选择；也没有做 Composio 那种「团队共享一次连接、全员在 MCP 里直接用」的模式，一个 tenant API key 目前就是唯一的隔离边界。
 - 用户系统是「一个用户 = 一个 tenant」，没有团队/多用户共享 tenant；也没有密码重置、邮箱验证、登录限流；session 没做单设备互踢。
+- 控制台是纯前端页面调现有 REST 接口，没有独立的控制台专用后端；没有 CLI（Composio 有 `composio search` / `composio execute`）。
 
 ## 相对 Composio 的已知差距（不是本仓库要追平的，是记录清楚在哪）
 
-对着 Composio 实际 dashboard（1540 个应用、仅 GitHub 一家 872 个 action、CLI + 15 个客户端一键装、团队共享连接）核对过一轮：规模（app/action 数量）不打算追——那和这个项目「深度核实优于广度覆盖」的定位冲突，Composio 的目录是自动生成的，我们的是手工核实过真实调用的。会考虑的：多租户/团队模型、per-app 的细粒度权限（Composio 叫 "Enhanced Control"）、计费。不考虑：自动生成规模化 action 目录。
+对着 Composio 实际 dashboard（1540 个应用、仅 GitHub 一家 872 个 action、CLI + 15 个客户端一键装、团队共享连接）核对过一轮：规模（app/action 数量）不打算追——那和这个项目「深度核实优于广度覆盖」的定位冲突，Composio 的目录是自动生成的，我们的是手工核实过真实调用的。已经补上的：控制台 UI、账号自助管理、API Key 自助管理。还会考虑的：CLI、多租户/团队模型、per-app 的细粒度权限（Composio 叫 "Enhanced Control"）、计费。不考虑：自动生成规模化 action 目录。
