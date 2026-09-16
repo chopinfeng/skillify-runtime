@@ -54,13 +54,22 @@ function buildServer(env: Env, tenant: TenantRow): McpServer {
     "bigmodel_chat_completion",
     {
       description: bigmodelChatCompletion.tool.description,
-      inputSchema: z.object({
-        model: z.string().describe("e.g. glm-4.6"),
-        messages: z.array(z.record(z.string(), z.unknown())),
-        tools: z.array(z.record(z.string(), z.unknown())).optional(),
-        tool_choice: z.literal("auto").optional(),
-        temperature: z.number().optional(),
-      }),
+      // .passthrough(): the platform accepts many more fields than we
+      // enumerate here (max_tokens, response_format, thinking, ...) and
+      // the REST execute route already forwards the raw input body
+      // wholesale (actions.ts stringifies ctx.input as-is). A bare
+      // z.object() strips anything not listed below by default — that
+      // would silently drop fields an agent legitimately sets, which is
+      // exactly the class of silent failure this project exists to catch.
+      inputSchema: z
+        .object({
+          model: z.string().describe("e.g. glm-4.6"),
+          messages: z.array(z.record(z.string(), z.unknown())),
+          tools: z.array(z.record(z.string(), z.unknown())).optional(),
+          tool_choice: z.literal("auto").optional(),
+          temperature: z.number().optional(),
+        })
+        .passthrough(),
     },
     async (args) => callViaMostRecentAccount(env, tenant, bigmodelChatCompletion, args),
   );
@@ -69,12 +78,14 @@ function buildServer(env: Env, tenant: TenantRow): McpServer {
     "feishu_send_message",
     {
       description: feishuSendMessage.tool.description,
-      inputSchema: z.object({
-        receive_id: z.string(),
-        receive_id_type: z.enum(["open_id", "user_id", "union_id", "email", "chat_id"]),
-        msg_type: z.string().describe('e.g. "text", "post", "interactive"'),
-        content: z.record(z.string(), z.unknown()),
-      }),
+      inputSchema: z
+        .object({
+          receive_id: z.string(),
+          receive_id_type: z.enum(["open_id", "user_id", "union_id", "email", "chat_id"]),
+          msg_type: z.string().describe('e.g. "text", "post", "interactive"'),
+          content: z.record(z.string(), z.unknown()),
+        })
+        .passthrough(),
     },
     async (args) => callViaMostRecentAccount(env, tenant, feishuSendMessage, args),
   );
@@ -83,12 +94,14 @@ function buildServer(env: Env, tenant: TenantRow): McpServer {
     "feishu_bitable_batch_create_records",
     {
       description: feishuBitableBatchCreateRecords.tool.description,
-      inputSchema: z.object({
-        app_token: z.string(),
-        table_id: z.string(),
-        records: z.array(z.object({ fields: z.record(z.string(), z.unknown()) })),
-        date_fields: z.array(z.string()).optional(),
-      }),
+      inputSchema: z
+        .object({
+          app_token: z.string(),
+          table_id: z.string(),
+          records: z.array(z.object({ fields: z.record(z.string(), z.unknown()) })),
+          date_fields: z.array(z.string()).optional(),
+        })
+        .passthrough(),
     },
     async (args) => callViaMostRecentAccount(env, tenant, feishuBitableBatchCreateRecords, args),
   );
