@@ -98,6 +98,22 @@ curl localhost:8787/v1/audit-log -H "Authorization: Bearer $TENANT_KEY"
 
 和 REST 的关键差异：MCP 的 `tools/call` **不需要传 `connected_account_id`**——网关自动挑该 tenant 在对应平台下最近一次创建、未撤销的 connected account（`db.ts` 的 `getMostRecentConnectedAccount`）。这模拟的是 Composio dashboard「连过的 app 直接能用」的体验；账号本身还是走 REST 的 `POST /v1/connected-accounts` 连。一个 tenant 在同一平台下挂多个账号时，MCP 侧目前只会用最新那个——还没做「选哪个账号」的显式入参，这是已知的简化，不是遗漏。
 
+## CLI
+
+`cli/skillify.mjs`（零依赖，Node 18+ 自带的 `fetch` 就够）——对应 Composio 的 `composio search` / `composio execute`：
+
+```bash
+export SKILLIFY_API_KEY=sk_live_xxx   # 从 /console 或 POST /v1/api-keys 拿
+
+node cli/skillify.mjs tools                        # 列出所有工具
+node cli/skillify.mjs search feishu                 # 按关键字找工具
+node cli/skillify.mjs execute bigmodel_chat_completion -d '{"model":"glm-4.6","messages":[{"role":"user","content":"hi"}]}'
+node cli/skillify.mjs accounts                       # 列出已连接账号
+node cli/skillify.mjs audit-log                      # 最近调用记录
+```
+
+`execute` 走的是 `/mcp`（先 `initialize` 再 `tools/call`），不是 REST——这样天然复用 MCP 那条「自动选最新 connected account」的路径，命令行不用管 `connected_account_id`。`npm link` 之后可以直接用 `skillify` 这个命令（`package.json` 已经声明了 `bin`），没做的话就用 `node cli/skillify.mjs`。
+
 ## 测试
 
 ```bash
@@ -117,8 +133,9 @@ FEISHU_APP_ID=... FEISHU_APP_SECRET=... npm test   # 加上 feishu 真实调用�
 - `KEK_BASE64` 是普通 Worker secret，不是 Cloudflare Secrets Store 资源——先够用，后续要升级路径明确（换成从 Secrets Store 读取即可，`lib/crypto.ts` 的接口不用变）。
 - MCP 侧的账号选择是「同平台下最新一个」，没有多账号显式选择；也没有做 Composio 那种「团队共享一次连接、全员在 MCP 里直接用」的模式，一个 tenant API key 目前就是唯一的隔离边界。
 - 用户系统是「一个用户 = 一个 tenant」，没有团队/多用户共享 tenant；也没有密码重置、邮箱验证、登录限流；session 没做单设备互踢。
-- 控制台是纯前端页面调现有 REST 接口，没有独立的控制台专用后端；没有 CLI（Composio 有 `composio search` / `composio execute`）。
+- 控制台是纯前端页面调现有 REST 接口，没有独立的控制台专用后端。
+- CLI 只有 `tools`/`search`/`execute`/`accounts`/`audit-log` 五个子命令，没有 `composio` 那种一键 install 到各种 agent 客户端的能力（那是 `/console` 里的 MCP 配置片段在做）。
 
 ## 相对 Composio 的已知差距（不是本仓库要追平的，是记录清楚在哪）
 
-对着 Composio 实际 dashboard（1540 个应用、仅 GitHub 一家 872 个 action、CLI + 15 个客户端一键装、团队共享连接）核对过一轮：规模（app/action 数量）不打算追——那和这个项目「深度核实优于广度覆盖」的定位冲突，Composio 的目录是自动生成的，我们的是手工核实过真实调用的。已经补上的：控制台 UI、账号自助管理、API Key 自助管理。还会考虑的：CLI、多租户/团队模型、per-app 的细粒度权限（Composio 叫 "Enhanced Control"）、计费。不考虑：自动生成规模化 action 目录。
+对着 Composio 实际 dashboard（1540 个应用、仅 GitHub 一家 872 个 action、CLI + 15 个客户端一键装、团队共享连接）核对过一轮：规模（app/action 数量）不打算追——那和这个项目「深度核实优于广度覆盖」的定位冲突，Composio 的目录是自动生成的，我们的是手工核实过真实调用的。已经补上的：控制台 UI、账号自助管理、API Key 自助管理、CLI。明确不做的（用户已确认）：多租户/团队模型。还会考虑的：per-app 的细粒度权限（Composio 叫 "Enhanced Control"）、计费。不考虑：自动生成规模化 action 目录。
