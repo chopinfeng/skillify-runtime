@@ -17,6 +17,12 @@ export default {
     const method = request.method;
 
     try {
+      // Public — no auth, no tenant. A bare visit to the domain (or any
+      // unrecognized path) should never look like an auth failure.
+      if (method === "GET" && pathname === "/") {
+        return Response.json({ service: "skillify-runtime", status: "ok", docs: "https://github.com/chopinfeng/skillify-runtime" });
+      }
+
       // Admin bootstrap — no tenant exists yet, so this authenticates
       // differently (ADMIN_TOKEN, not a tenant API key).
       if (method === "POST" && pathname === "/v1/tenants") {
@@ -45,19 +51,29 @@ export default {
       if (method === "POST" && pathname === "/v1/auth/logout") return await handleLogout(request, env);
       if (method === "GET" && pathname === "/v1/auth/me") return await handleMe(request, env);
 
-      // Everything else requires a tenant API key.
+      // Everything past this point requires a tenant API key — but only
+      // for paths that actually exist. Match the route shape FIRST so an
+      // unrecognized path 404s instead of masquerading as an auth failure
+      // (a caller with no credentials hitting a typo'd or nonexistent path
+      // should not see the same 401 as hitting a real protected route).
+      const revokeMatch = pathname.match(/^\/v1\/connected-accounts\/([^/]+)$/);
+      const isKnownProtectedRoute =
+        (method === "POST" && pathname === "/v1/connected-accounts") ||
+        (method === "GET" && pathname === "/v1/connected-accounts") ||
+        (method === "DELETE" && revokeMatch) ||
+        (method === "POST" && pathname === "/v1/actions/execute") ||
+        (method === "GET" && pathname === "/v1/audit-log");
+
+      if (!isKnownProtectedRoute) return Response.json({ error: "not found" }, { status: 404 });
+
       const tenant = await authenticateTenant(request, env);
       if (!tenant) return unauthorized();
 
       if (method === "POST" && pathname === "/v1/connected-accounts") return await handleCreateAccount(request, env, tenant);
       if (method === "GET" && pathname === "/v1/connected-accounts") return await handleListAccounts(env, tenant);
-      const revokeMatch = pathname.match(/^\/v1\/connected-accounts\/([^/]+)$/);
       if (method === "DELETE" && revokeMatch) return await handleRevokeAccount(env, tenant, revokeMatch[1]);
-
       if (method === "POST" && pathname === "/v1/actions/execute") return await handleExecute(request, env, tenant);
-      if (method === "GET" && pathname === "/v1/audit-log") return await handleAuditLog(request, env, tenant);
-
-      return Response.json({ error: "not found" }, { status: 404 });
+      return await handleAuditLog(request, env, tenant); // only remaining match: GET /v1/audit-log
     } catch (err) {
       console.error(err);
       return Response.json({ error: "internal error" }, { status: 500 });
