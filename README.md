@@ -108,6 +108,8 @@ FEISHU_APP_ID=... FEISHU_APP_SECRET=... npm test   # 加上 feishu 真实调用�
 
 真实凭证测试复用了 `Skillify/bigmodel-cn/evals/evals.json` 与 `Skillify/feishu/evals/evals.json` 里已经验证过的场景断言口径——网关不应该比 Agent 自己写代码调用更不准。
 
+**这句话本身现在有一套专门的评测方法论去验证，不只是口号**：[evals/PROTOCOL.md](evals/PROTOCOL.md) 设计了 skill-only（Agent 自己写代码）vs runtime（Agent 直接调 MCP 工具）的对照实验，`evals/run_agents.sh` + `evals/grade.py` 是可跑的 harness，方法论已冻结、脚本已 smoke test 过，等真实凭证到位就能跑 40 次批量验证。
+
 ## 已知取舍（MVP 阶段）
 
 - 限流是单个 connected account 内的简单节流（`ConnectedAccountDO.throttle`），不是按平台文档表格里的分级 QPS 精确实现。
