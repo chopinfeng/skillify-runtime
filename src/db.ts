@@ -1,10 +1,26 @@
 import type { Env, Platform } from "./types";
-import { randomApiKey, randomId, sha256Hex } from "./lib/crypto";
+import { generateDek, randomApiKey, randomId, sha256Hex, wrapDek } from "./lib/crypto";
 
 export interface TenantRow {
   id: string;
   name: string;
   dek_wrapped: string;
+  created_at: number;
+}
+
+export interface UserRow {
+  id: string;
+  tenant_id: string;
+  email: string;
+  password_hash: string;
+  created_at: number;
+}
+
+export interface SessionRow {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  expires_at: number;
   created_at: number;
 }
 
@@ -24,6 +40,20 @@ export async function createTenant(env: Env, name: string, dekWrapped: string): 
     .bind(row.id, row.name, row.dek_wrapped, row.created_at)
     .run();
   return row;
+}
+
+/** Generates and wraps a fresh DEK, then creates the tenant row — the part
+ * of tenant creation every caller needs (admin bootstrap, self-serve
+ * signup), factored out so both stay in sync. */
+export async function createTenantWithDek(env: Env, name: string): Promise<TenantRow> {
+  const dek = generateDek();
+  const dekWrapped = await wrapDek(dek, env.KEK_BASE64);
+  return createTenant(env, name, dekWrapped);
+}
+
+export async function getTenantById(env: Env, id: string): Promise<TenantRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM tenants WHERE id = ?").bind(id).first<TenantRow>();
+  return row ?? null;
 }
 
 /** Returns the plaintext key once — only its sha256 hash is persisted. */
@@ -146,4 +176,39 @@ export async function listAuditLog(env: Env, tenantId: string, limit = 50) {
     .bind(tenantId, limit)
     .all();
   return results;
+}
+
+export async function createUser(env: Env, tenantId: string, email: string, passwordHash: string): Promise<UserRow> {
+  const row: UserRow = { id: randomId("user"), tenant_id: tenantId, email, password_hash: passwordHash, created_at: Date.now() };
+  await env.DB.prepare("INSERT INTO users (id, tenant_id, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(row.id, row.tenant_id, row.email, row.password_hash, row.created_at)
+    .run();
+  return row;
+}
+
+export async function getUserByEmail(env: Env, email: string): Promise<UserRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM users WHERE email = ?").bind(email).first<UserRow>();
+  return row ?? null;
+}
+
+export async function getUserById(env: Env, id: string): Promise<UserRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(id).first<UserRow>();
+  return row ?? null;
+}
+
+export async function insertSession(env: Env, userId: string, tokenHash: string, expiresAt: number): Promise<SessionRow> {
+  const row: SessionRow = { id: randomId("sess"), user_id: userId, token_hash: tokenHash, expires_at: expiresAt, created_at: Date.now() };
+  await env.DB.prepare("INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(row.id, row.user_id, row.token_hash, row.expires_at, row.created_at)
+    .run();
+  return row;
+}
+
+export async function getSessionByTokenHash(env: Env, tokenHash: string): Promise<SessionRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM sessions WHERE token_hash = ?").bind(tokenHash).first<SessionRow>();
+  return row ?? null;
+}
+
+export async function deleteSession(env: Env, id: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM sessions WHERE id = ?").bind(id).run();
 }

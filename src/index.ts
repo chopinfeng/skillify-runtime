@@ -6,6 +6,7 @@ import { handleListTools } from "./routes/catalog";
 import { handleExecute } from "./routes/execute";
 import { handleAuditLog } from "./routes/audit";
 import { handleMcp } from "./mcp";
+import { handleLogin, handleLogout, handleMe, handleSignup } from "./routes/auth";
 
 export { ConnectedAccountDO } from "./durable-objects/ConnectedAccountDO";
 
@@ -35,6 +36,14 @@ export default {
       if (pathname === "/mcp") {
         return await handleMcp(request, env);
       }
+
+      // Human-user auth (signup/login issue a session cookie, for the
+      // future Web console) — a separate track from the tenant API key
+      // used by REST/MCP below. See plan: one user = one tenant.
+      if (method === "POST" && pathname === "/v1/auth/signup") return await handleSignup(request, env);
+      if (method === "POST" && pathname === "/v1/auth/login") return await handleLogin(request, env);
+      if (method === "POST" && pathname === "/v1/auth/logout") return await handleLogout(request, env);
+      if (method === "GET" && pathname === "/v1/auth/me") return await handleMe(request, env);
 
       // Everything else requires a tenant API key.
       const tenant = await authenticateTenant(request, env);

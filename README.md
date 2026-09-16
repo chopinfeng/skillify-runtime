@@ -24,12 +24,34 @@ wrangler secret put ADMIN_TOKEN       # 任意随机字符串，用于 POST /v1/
 npm run dev
 ```
 
+## 用户系统：邮箱+密码登录
+
+建 tenant 现在有两条路，互不冲突：管理员用 `ADMIN_TOKEN` 手工建（下面的 API 速览第 1 步），或者真人自助注册——**一个用户对应一个新建的 tenant**，为以后的 Web 控制台准备登录态。登录态是 session cookie，和调 REST/MCP 用的 tenant API Key 是两条独立的认证轨道，不能互换。
+
+```bash
+# 注册：自动开一个新 tenant，拿到一次性显示的 api_key，同时种下 session cookie
+curl -c cookies.txt -X POST localhost:8787/v1/auth/signup \
+  -d '{"email":"you@example.com","password":"at-least-8-chars"}'
+
+# 登录：换一个新 session
+curl -c cookies.txt -X POST localhost:8787/v1/auth/login \
+  -d '{"email":"you@example.com","password":"at-least-8-chars"}'
+
+# 我是谁（校验 session）
+curl -b cookies.txt localhost:8787/v1/auth/me
+
+# 登出：撤销这条 session（服务端删记录，不是纯签名 token 那种没法撤销的）
+curl -b cookies.txt -X POST localhost:8787/v1/auth/logout
+```
+
+密码用 PBKDF2-HMAC-SHA256 哈希，**100,000 次迭代**——OWASP 现在推荐 210,000，但 Workers 运行时的 WebCrypto PBKDF2 实现硬性上限就是 100,000（`NotSupportedError`，本地 `wrangler dev` 用的 Miniflare 不会拦，只有部署到真实 Workers 才报错，踩过一次坑，见 `src/lib/password.ts` 注释）。登录失败一律返回同一句 `invalid email or password`，不区分是邮箱不存在还是密码错。这轮没做的：密码重置、邮箱验证、登录失败限流、单设备踢旧 session。
+
 ## API 速览
 
 所有非 admin 接口都要求 `Authorization: Bearer <tenant api key>`。
 
 ```bash
-# 1. 用 ADMIN_TOKEN 建一个 tenant，拿到它的 api key（只显示这一次）
+# 1. 用 ADMIN_TOKEN 建一个 tenant，拿到它的 api key（只显示这一次）——运维/脚本化路径，和上面的自助注册并存
 curl -X POST localhost:8787/v1/tenants \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -d '{"name":"acme"}'
@@ -86,6 +108,7 @@ FEISHU_APP_ID=... FEISHU_APP_SECRET=... npm test   # 加上 feishu 真实调用�
 - 审计日志直接写 D1，没有做量大后搬 Queues/R2 的分流。
 - `KEK_BASE64` 是普通 Worker secret，不是 Cloudflare Secrets Store 资源——先够用，后续要升级路径明确（换成从 Secrets Store 读取即可，`lib/crypto.ts` 的接口不用变）。
 - MCP 侧的账号选择是「同平台下最新一个」，没有多账号显式选择；也没有做 Composio 那种「团队共享一次连接、全员在 MCP 里直接用」的模式，一个 tenant API key 目前就是唯一的隔离边界。
+- 用户系统是「一个用户 = 一个 tenant」，没有团队/多用户共享 tenant；也没有密码重置、邮箱验证、登录限流；session 没做单设备互踢。
 
 ## 相对 Composio 的已知差距（不是本仓库要追平的，是记录清楚在哪）
 
