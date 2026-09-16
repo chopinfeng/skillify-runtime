@@ -173,12 +173,17 @@ export interface AuditLogEntry {
   httpStatus: number | null;
   platformCode: string | null;
   durationMs: number;
+  /** Caller's business arguments and the platform's response data —
+   * never credentials (those live only in ctx.secret, which this never
+   * sees). Truncated by the caller before insertion; see run-action.ts. */
+  inputJson: string | null;
+  outputJson: string | null;
 }
 
 export async function insertAuditLog(env: Env, entry: AuditLogEntry): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO audit_log (id, tenant_id, account_id, tool_name, ok, http_status, platform_code, duration_ms, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO audit_log (id, tenant_id, account_id, tool_name, ok, http_status, platform_code, duration_ms, input_json, output_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       randomId("log"),
@@ -189,6 +194,8 @@ export async function insertAuditLog(env: Env, entry: AuditLogEntry): Promise<vo
       entry.httpStatus,
       entry.platformCode,
       entry.durationMs,
+      entry.inputJson,
+      entry.outputJson,
       Date.now(),
     )
     .run();

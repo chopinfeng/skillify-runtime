@@ -28,7 +28,25 @@ export async function runAction(
     httpStatus: result.httpStatus,
     platformCode: result.platformCode,
     durationMs,
+    inputJson: truncate(safeStringify(input)),
+    outputJson: truncate(safeStringify(result.data)),
   });
 
   return result;
+}
+
+const MAX_PAYLOAD_CHARS = 2000;
+
+function safeStringify(value: unknown): string | null {
+  if (value === undefined) return null;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
+function truncate(json: string | null): string | null {
+  if (json === null) return null;
+  return json.length > MAX_PAYLOAD_CHARS ? json.slice(0, MAX_PAYLOAD_CHARS) + "…(truncated)" : json;
 }
