@@ -48,23 +48,24 @@ curl -b cookies.txt -X POST localhost:8787/v1/auth/logout
 
 `connected-accounts` / `execute` / `audit-log` 这几个原本只认 tenant API Key 的接口，现在**也**认 session cookie（`lib/auth.ts` 的 `authenticateTenant` 两条认证轨道都试）——这样控制台才能用登录态直接管理自己的 tenant，不用先手动去拿一把 key。
 
-### 用 Google 账号登录
+### 用 Auth0 登录
 
-`GET /v1/auth/google/start` → Google 授权页 → `GET /v1/auth/google/callback` 换 token、拉 `openidconnect.googleapis.com/v1/userinfo`、按 `(provider, provider_user_id)` 查/建用户，登录结果和邮箱密码登录一样——种下同一种 session cookie。规则：
+`GET /v1/auth/auth0/start` → Auth0 Universal Login → `GET /v1/auth/auth0/callback` 换 token、拉 `https://<domain>/userinfo`、按 `(provider, provider_user_id)` 查/建用户，登录结果和邮箱密码登录一样——种下同一种 session cookie。**2026-09-17 从直连 Google OAuth 换成了 Auth0**：Auth0 本身就是一层身份代理，要接入 Google/GitHub 等更多登录方式，去 Auth0 dashboard 开对应的 Connection 就行，不用再改这边的代码。规则：
 
-- 只信 Google 报告 `email_verified: true` 的邮箱；未验证一律拒绝。
-- 邮箱和已有密码账号重合时**自动关联**（同一封 Google 已验证过的邮箱，视为同一个人），不建重复 tenant。
+- 只信 Auth0 报告 `email_verified: true` 的邮箱；未验证一律拒绝。
+- 邮箱和已有密码账号重合时**自动关联**（同一封已验证邮箱，视为同一个人），不建重复 tenant。
 - 全新邮箱：照常开一个新 tenant + 新用户，`password_hash` 存一个不可能被撞上的随机值占位（SQLite 改列约束成本高，没有单独开一列允许 NULL），不代表这个账号"有密码"。
 - CSRF 用双提交 cookie：`start` 生成的 `state` 既进授权 URL 也进一个 10 分钟有效期的 HttpOnly cookie，`callback` 两边对不上直接 400。
-- id_token 的 JWT 签名**没有**在这边自己验——用换来的 `access_token` 直接打 Google 官方 userinfo 端点，省掉自己拉 JWKS、做 RS256 验签这一块，换来的信任链是"这个 access_token 本来就是用 client_secret 跟 Google 换的，问 Google 自己这个 token 是谁"，足够。
+- id_token 的 JWT 签名**没有**在这边自己验——用换来的 `access_token` 直接打 Auth0 自己的 `/userinfo` 端点，省掉自己拉 JWKS、做 RS256 验签这一块，换来的信任链是"这个 access_token 本来就是用 client_secret 跟 Auth0 换的，问 Auth0 自己这个 token 是谁"，足够。
+- `oauth_identities` 表按 `(provider, provider_user_id)` 存，`provider` 固定是 `"auth0"`；Auth0 的 `sub` 本身就带了联邦来源前缀（比如 `google-oauth2|...` 还是 `auth0|...` 这种自家数据库账号），不用另外记一遍。
 
-**部署这一步需要你在 Google Cloud Console 建一个 OAuth 2.0 Client ID（Web application 类型），把这个 URL 加进 Authorized redirect URIs：**
+部署这一步：Auth0 Application 类型要是 **Regular Web Application**（不是 Machine to Machine——M2M 应用的凭证做不了这个 Authorization Code 登录流程）。实测第一次配置时踩到的坑是 Callback URL 没加白名单，Auth0 直接返回 403 页面「Callback URL mismatch」；加完白名单立刻就能走到 Auth0 真实的 Universal Login 页面，说明这套 Client ID/Secret 本身是对的（如果真是 M2M 凭证，报错会是 `unauthorized_client` 这类授权类型错误，不是 callback URL 的问题）。Allowed Callback URLs 里要有：
 
 ```
-https://skillify.carbonleft.com/v1/auth/google/callback
+https://skillify.carbonleft.com/v1/auth/auth0/callback
 ```
 
-建好之后把 Client ID 和 Client Secret 贴给我，我用 `wrangler secret put GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` 设上，不落盘。设置好之前 `/v1/auth/google/start` 会直接返回 `501` 加一句清楚的错误，不会裸崩。
+拿到 Domain、Client ID、Client Secret 贴给我，我用 `wrangler secret put AUTH0_DOMAIN` / `AUTH0_CLIENT_ID` / `AUTH0_CLIENT_SECRET` 设上，不落盘。设置好之前 `/v1/auth/auth0/start` 会直接返回 `501` 加一句清楚的错误，不会裸崩。
 
 ## 控制台
 

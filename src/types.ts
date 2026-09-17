@@ -5,10 +5,11 @@ export interface Env {
   CONNECTED_ACCOUNT: DurableObjectNamespace<ConnectedAccountDO>;
   KEK_BASE64: string;
   ADMIN_TOKEN: string;
-  /** Optional — "Sign in with Google" is disabled (a clear error, not a
-   * crash) until both are set via `wrangler secret put`. */
-  GOOGLE_CLIENT_ID?: string;
-  GOOGLE_CLIENT_SECRET?: string;
+  /** Optional — "Sign in with Auth0" is disabled (a clear error, not a
+   * crash) until all three are set via `wrangler secret put`. */
+  AUTH0_DOMAIN?: string;
+  AUTH0_CLIENT_ID?: string;
+  AUTH0_CLIENT_SECRET?: string;
 }
 
 export type Platform = "bigmodel-cn" | "feishu";
