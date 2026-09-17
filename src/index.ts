@@ -10,6 +10,7 @@ import { handleLogin, handleLogout, handleMe, handleSignup } from "./routes/auth
 import { handleAuth0Callback, handleAuth0Start } from "./routes/oauth-auth0";
 import { handleCreateApiKey, handleListApiKeys, handleRevokeApiKey } from "./routes/api-keys";
 import { handleConsole } from "./console";
+import { handleLanding } from "./landing";
 
 export { ConnectedAccountDO } from "./durable-objects/ConnectedAccountDO";
 
@@ -22,14 +23,7 @@ export default {
     try {
       // Public — no auth, no tenant. A bare visit to the domain (or any
       // unrecognized path) should never look like an auth failure.
-      if (method === "GET" && pathname === "/") {
-        return Response.json({
-          service: "skillify-runtime",
-          status: "ok",
-          console: "https://skillify.carbonleft.com/console",
-          docs: "https://github.com/chopinfeng/skillify-runtime",
-        });
-      }
+      if (method === "GET" && pathname === "/") return handleLanding();
       if (method === "GET" && pathname === "/console") return handleConsole();
 
       // Admin bootstrap — no tenant exists yet, so this authenticates
