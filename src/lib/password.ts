@@ -46,6 +46,15 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return constantTimeEqual(actual, expected);
 }
 
+/** For an OAuth-only signup (see routes/oauth-google.ts): `users.password_hash`
+ * is NOT NULL and SQLite can't cheaply drop that constraint, so a Google-only
+ * account gets a normal PBKDF2 hash of unguessable random bytes instead of a
+ * real password. `verifyPassword` against it always returns false — there's
+ * nothing special-cased about it, it's just a hash nobody typed. */
+export async function unusablePasswordHash(): Promise<string> {
+  return hashPassword(toBase64(crypto.getRandomValues(new Uint8Array(32))));
+}
+
 function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;

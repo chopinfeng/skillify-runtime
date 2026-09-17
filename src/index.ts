@@ -7,6 +7,7 @@ import { handleExecute } from "./routes/execute";
 import { handleAuditLog } from "./routes/audit";
 import { handleMcp } from "./mcp";
 import { handleLogin, handleLogout, handleMe, handleSignup } from "./routes/auth";
+import { handleGoogleCallback, handleGoogleStart } from "./routes/oauth-google";
 import { handleCreateApiKey, handleListApiKeys, handleRevokeApiKey } from "./routes/api-keys";
 import { handleConsole } from "./console";
 
@@ -58,6 +59,11 @@ export default {
       if (method === "POST" && pathname === "/v1/auth/login") return await handleLogin(request, env);
       if (method === "POST" && pathname === "/v1/auth/logout") return await handleLogout(request, env);
       if (method === "GET" && pathname === "/v1/auth/me") return await handleMe(request, env);
+
+      // "Sign in with Google" — same session-cookie outcome as signup/login,
+      // just reached via Google's consent screen instead of a password.
+      if (method === "GET" && pathname === "/v1/auth/google/start") return await handleGoogleStart(request, env);
+      if (method === "GET" && pathname === "/v1/auth/google/callback") return await handleGoogleCallback(request, env);
 
       // API key self-service — also session-gated (the console), not
       // tenant-API-key-gated: you shouldn't need a key already in hand to

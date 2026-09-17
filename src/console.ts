@@ -56,6 +56,8 @@ const HTML = `<!doctype html>
   </form>
 
   <p id="auth-msg" class="err"></p>
+
+  <p class="row"><a href="/v1/auth/google/start">Sign in with Google</a></p>
 </div>
 
 <div id="dashboard-view" class="hidden">

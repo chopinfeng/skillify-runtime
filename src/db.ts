@@ -228,6 +228,31 @@ export async function getUserById(env: Env, id: string): Promise<UserRow | null>
   return row ?? null;
 }
 
+export interface OAuthIdentityRow {
+  id: string;
+  user_id: string;
+  provider: string;
+  provider_user_id: string;
+  created_at: number;
+}
+
+export async function getUserByOAuthIdentity(env: Env, provider: string, providerUserId: string): Promise<UserRow | null> {
+  const row = await env.DB.prepare(
+    `SELECT u.* FROM users u JOIN oauth_identities o ON o.user_id = u.id WHERE o.provider = ? AND o.provider_user_id = ?`,
+  )
+    .bind(provider, providerUserId)
+    .first<UserRow>();
+  return row ?? null;
+}
+
+export async function createOAuthIdentity(env: Env, userId: string, provider: string, providerUserId: string): Promise<OAuthIdentityRow> {
+  const row: OAuthIdentityRow = { id: randomId("oauth"), user_id: userId, provider, provider_user_id: providerUserId, created_at: Date.now() };
+  await env.DB.prepare("INSERT INTO oauth_identities (id, user_id, provider, provider_user_id, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(row.id, row.user_id, row.provider, row.provider_user_id, row.created_at)
+    .run();
+  return row;
+}
+
 export async function insertSession(env: Env, userId: string, tokenHash: string, expiresAt: number): Promise<SessionRow> {
   const row: SessionRow = { id: randomId("sess"), user_id: userId, token_hash: tokenHash, expires_at: expiresAt, created_at: Date.now() };
   await env.DB.prepare("INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")

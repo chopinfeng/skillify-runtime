@@ -31,6 +31,8 @@
     }
   ]
   // Secrets (set via `wrangler secret put <NAME>`, never committed):
-  //   KEK_BASE64   - 32-byte AES-GCM root key, base64, wraps each tenant's DEK
-  //   ADMIN_TOKEN  - bearer token for the POST /v1/tenants bootstrap route
+  //   KEK_BASE64            - 32-byte AES-GCM root key, base64, wraps each tenant's DEK
+  //   ADMIN_TOKEN           - bearer token for the POST /v1/tenants bootstrap route
+  //   GOOGLE_CLIENT_ID      - optional; "Sign in with Google" is a clean 501 until both are set
+  //   GOOGLE_CLIENT_SECRET  - redirect URI to register: https://skillify.carbonleft.com/v1/auth/google/callback
 }
