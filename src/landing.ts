@@ -114,6 +114,7 @@ const HTML = `<!doctype html>
     <div class="brand">skillify-runtime</div>
     <nav>
       <a href="#coverage">支持的平台</a>
+      <a href="#for-agents">给 Agent</a>
       <a href="#mcp">MCP 接入</a>
       <a href="/console">控制台</a>
     </nav>
@@ -191,6 +192,41 @@ const HTML = `<!doctype html>
     </div>
   </section>
 
+  <section id="for-agents">
+    <h2>给 Agent：不用人先注册</h2>
+    <p class="sub">
+      上面"怎么用"那四步是给人看的。如果你是一个 Agent，不需要先等人给你开账号——自己调一个接口就能拿到能用的凭证，
+      机器可读版本在 <a href="/llms.txt"><code>/llms.txt</code></a>。
+    </p>
+    <div class="steps">
+      <div class="step">
+        <div>
+          <h3>自主注册</h3>
+          <p><code>POST /v1/auth/agent-register</code>，不用邮箱密码，按来源 IP 限流每小时 5 次。返回一个 <code>tenant_id</code> 和一次性显示的 <code>api_key</code>，立刻就能拿去调 <code>/v1/tools</code>、<code>/mcp</code>。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h3>未认领 ≠ 可长期依赖</h3>
+          <p>这样开出来的 tenant 处于"未认领"状态——没有邮箱找回，丢了这把 key 就找不回来了。这个项目对外报的 tenant/调用数字只统计已认领的，不靠未认领账号刷量。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h3>认领（可选，转正）</h3>
+          <p>想长期用的话，用这把 <code>api_key</code> 当 Bearer token 调 <code>POST /v1/auth/claim</code>，附上邮箱密码，转成正式账号——这一步通常该由人来做，而不是 Agent 替自己做主创建密码。</p>
+        </div>
+      </div>
+    </div>
+    <div class="code-wrap">
+      <pre>curl -X POST https://skillify.carbonleft.com/v1/auth/agent-register \\
+  -H "Content-Type: application/json" \\
+  -d '{"name": "your-agent-name", "description": "what you do"}'
+
+# -&gt; {"tenant_id": "...", "api_key": "sk_live_...", "claimed": false}</pre>
+    </div>
+  </section>
+
   <section id="mcp">
     <h2>MCP 接入</h2>
     <p class="sub">在支持自定义 MCP server 的客户端里配置，把 <code>&lt;your api key&gt;</code> 换成控制台里生成的 API Key：</p>
@@ -201,7 +237,7 @@ const HTML = `<!doctype html>
   </section>
 
   <footer>
-    skillify-runtime · <a href="/console">控制台</a> · <a href="/v1/tools">工具目录</a>
+    skillify-runtime · <a href="/console">控制台</a> · <a href="/v1/tools">工具目录</a> · <a href="/llms.txt">llms.txt</a>
   </footer>
 </div>
 

@@ -13,6 +13,7 @@ import { handleAgentRegister } from "./routes/agent-register";
 import { handleClaim } from "./routes/claim";
 import { handleConsole } from "./console";
 import { handleLanding } from "./landing";
+import { handleLlmsTxt } from "./llms-txt";
 
 export { ConnectedAccountDO } from "./durable-objects/ConnectedAccountDO";
 
@@ -27,6 +28,7 @@ export default {
       // unrecognized path) should never look like an auth failure.
       if (method === "GET" && pathname === "/") return handleLanding();
       if (method === "GET" && pathname === "/console") return handleConsole();
+      if (method === "GET" && pathname === "/llms.txt") return handleLlmsTxt();
 
       // Admin bootstrap — no tenant exists yet, so this authenticates
       // differently (ADMIN_TOKEN, not a tenant API key).
