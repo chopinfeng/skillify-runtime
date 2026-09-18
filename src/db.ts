@@ -6,6 +6,10 @@ export interface TenantRow {
   name: string;
   dek_wrapped: string;
   created_at: number;
+  /** Null until a human attaches an email+password via POST /v1/auth/claim.
+   * The one signal that separates a real account from an Agent that
+   * self-registered and never got claimed — see migrations/0005. */
+  claimed_by_user_id: string | null;
 }
 
 export interface UserRow {
@@ -35,11 +39,22 @@ export interface ConnectedAccountRow {
 }
 
 export async function createTenant(env: Env, name: string, dekWrapped: string): Promise<TenantRow> {
-  const row: TenantRow = { id: randomId("tenant"), name, dek_wrapped: dekWrapped, created_at: Date.now() };
+  const row: TenantRow = { id: randomId("tenant"), name, dek_wrapped: dekWrapped, created_at: Date.now(), claimed_by_user_id: null };
   await env.DB.prepare("INSERT INTO tenants (id, name, dek_wrapped, created_at) VALUES (?, ?, ?, ?)")
     .bind(row.id, row.name, row.dek_wrapped, row.created_at)
     .run();
   return row;
+}
+
+/** Marks an unclaimed (Agent-registered) tenant as owned by a real human
+ * user. Returns false without writing anything if the tenant was already
+ * claimed — the caller must treat that as a conflict, not silently
+ * overwrite an existing claim. */
+export async function claimTenant(env: Env, tenantId: string, userId: string): Promise<boolean> {
+  const result = await env.DB.prepare("UPDATE tenants SET claimed_by_user_id = ? WHERE id = ? AND claimed_by_user_id IS NULL")
+    .bind(userId, tenantId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
 }
 
 /** Generates and wraps a fresh DEK, then creates the tenant row — the part
@@ -268,4 +283,19 @@ export async function getSessionByTokenHash(env: Env, tokenHash: string): Promis
 
 export async function deleteSession(env: Env, id: string): Promise<void> {
   await env.DB.prepare("DELETE FROM sessions WHERE id = ?").bind(id).run();
+}
+
+/** Records one hit against the open agent-registration endpoint, keyed by a
+ * hash of the caller's IP — never the raw address. */
+export async function recordRegistrationAttempt(env: Env, ipHash: string): Promise<void> {
+  await env.DB.prepare("INSERT INTO registration_attempts (id, ip_hash, created_at) VALUES (?, ?, ?)")
+    .bind(randomId("reg"), ipHash, Date.now())
+    .run();
+}
+
+export async function countRecentRegistrationAttempts(env: Env, ipHash: string, sinceMs: number): Promise<number> {
+  const row = await env.DB.prepare("SELECT COUNT(*) as n FROM registration_attempts WHERE ip_hash = ? AND created_at >= ?")
+    .bind(ipHash, sinceMs)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }

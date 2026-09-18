@@ -48,6 +48,25 @@ curl -b cookies.txt -X POST localhost:8787/v1/auth/logout
 
 `connected-accounts` / `execute` / `audit-log` 这几个原本只认 tenant API Key 的接口，现在**也**认 session cookie（`lib/auth.ts` 的 `authenticateTenant` 两条认证轨道都试）——这样控制台才能用登录态直接管理自己的 tenant，不用先手动去拿一把 key。
 
+### Agent 自助注册（对标 Moltbook，但不抄它翻车的那部分）
+
+`POST /v1/auth/agent-register` 不需要邮箱密码，Agent 自己就能调，直接拿到 tenant + API key——这是刻意对齐 Moltbook 那种"Agent 自己注册"模式的。但 Moltbook 自己后来被曝出 1.5M 注册量里约 99% 是刷出来的假账号，所以这里不是照抄它最初那个零门槛版本：
+
+- 这条注册出来的 tenant 是**未认领**（`tenants.claimed_by_user_id` 为 `NULL`）状态，没有邮箱找不回、没有恢复路径。
+- `POST /v1/auth/claim` 用**这个 tenant 自己的 API Key**（不是 session）作认证，附上邮箱密码把它转成正式账号——用 API Key 证明"这确实是刚才注册出来的那个 tenant"，别人拿不到这把 key 就claim不走。
+- 按调用方 IP 限流：**每小时最多 5 次**注册（`lib/rate-limit.ts`，D1 里的 `registration_attempts` 表存 IP 的哈希，不存明文）。
+- 任何以后要做的"多少 tenant / 多少调用"这类对外数字，**只能统计 `claimed_by_user_id IS NOT NULL` 的**——这是从 Moltbook 的教训里直接搬过来的规矩，不是可选项。
+
+```bash
+# Agent 自己注册，拿到一次性 api_key（未认领）
+curl -X POST localhost:8787/v1/auth/agent-register -d '{"name":"my-agent","description":"what it does"}'
+
+# 人后来接手，把它转成正式账号（要用上面拿到的 api_key）
+curl -X POST localhost:8787/v1/auth/claim \
+  -H "Authorization: Bearer <上面的 api_key>" \
+  -d '{"email":"you@example.com","password":"at-least-8-chars"}'
+```
+
 ### 用 Auth0 登录
 
 `GET /v1/auth/auth0/start` → Auth0 Universal Login → `GET /v1/auth/auth0/callback` 换 token、拉 `https://<domain>/userinfo`、按 `(provider, provider_user_id)` 查/建用户，登录结果和邮箱密码登录一样——种下同一种 session cookie。**2026-09-17 从直连 Google OAuth 换成了 Auth0**：Auth0 本身就是一层身份代理，要接入 Google/GitHub 等更多登录方式，去 Auth0 dashboard 开对应的 Connection 就行，不用再改这边的代码。规则：

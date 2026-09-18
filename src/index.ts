@@ -9,6 +9,8 @@ import { handleMcp } from "./mcp";
 import { handleLogin, handleLogout, handleMe, handleSignup } from "./routes/auth";
 import { handleAuth0Callback, handleAuth0Start } from "./routes/oauth-auth0";
 import { handleCreateApiKey, handleListApiKeys, handleRevokeApiKey } from "./routes/api-keys";
+import { handleAgentRegister } from "./routes/agent-register";
+import { handleClaim } from "./routes/claim";
 import { handleConsole } from "./console";
 import { handleLanding } from "./landing";
 
@@ -58,6 +60,13 @@ export default {
       // just reached via Auth0's Universal Login instead of a password.
       if (method === "GET" && pathname === "/v1/auth/auth0/start") return await handleAuth0Start(request, env);
       if (method === "GET" && pathname === "/v1/auth/auth0/callback") return await handleAuth0Callback(request, env);
+
+      // Agent self-registration — no email/password, rate-limited per IP,
+      // returns an UNCLAIMED tenant (see migrations/0005). Claiming needs
+      // the tenant's own API key as proof of possession, not a session —
+      // there's no session to have yet at this point.
+      if (method === "POST" && pathname === "/v1/auth/agent-register") return await handleAgentRegister(request, env);
+      if (method === "POST" && pathname === "/v1/auth/claim") return await handleClaim(request, env);
 
       // API key self-service — also session-gated (the console), not
       // tenant-API-key-gated: you shouldn't need a key already in hand to

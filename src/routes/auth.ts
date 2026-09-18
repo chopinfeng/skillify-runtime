@@ -3,8 +3,8 @@ import { createTenantApiKey, createTenantWithDek, createUser, getUserByEmail } f
 import { hashPassword, verifyPassword } from "../lib/password";
 import { clearedSessionCookie, createSessionCookie, resolveSession, revokeCurrentSession } from "../lib/session";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 8;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const MIN_PASSWORD_LENGTH = 8;
 
 interface Credentials {
   email?: string;
