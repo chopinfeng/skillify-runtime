@@ -33,7 +33,7 @@ export default {
       // Admin bootstrap — no tenant exists yet, so this authenticates
       // differently (ADMIN_TOKEN, not a tenant API key).
       if (method === "POST" && pathname === "/v1/tenants") {
-        if (!requireAdmin(request, env)) return unauthorized();
+        if (!(await requireAdmin(request, env))) return unauthorized();
         return await handleCreateTenant(request, env);
       }
 
