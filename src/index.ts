@@ -11,6 +11,7 @@ import { handleAuth0Callback, handleAuth0Start } from "./routes/oauth-auth0";
 import { handleCreateApiKey, handleListApiKeys, handleRevokeApiKey } from "./routes/api-keys";
 import { handleAgentRegister } from "./routes/agent-register";
 import { handleClaim } from "./routes/claim";
+import { handlePowChallenge } from "./routes/pow-challenge";
 import { handleConsole } from "./console";
 import { handleLanding } from "./landing";
 import { handleLlmsTxt } from "./llms-txt";
@@ -67,6 +68,7 @@ export default {
       // returns an UNCLAIMED tenant (see migrations/0005). Claiming needs
       // the tenant's own API key as proof of possession, not a session —
       // there's no session to have yet at this point.
+      if (method === "GET" && pathname === "/v1/auth/pow-challenge") return await handlePowChallenge(env);
       if (method === "POST" && pathname === "/v1/auth/agent-register") return await handleAgentRegister(request, env);
       if (method === "POST" && pathname === "/v1/auth/claim") return await handleClaim(request, env);
 

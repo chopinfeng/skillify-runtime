@@ -47,6 +47,7 @@ export function createFakeD1() {
     sessions: [],
     oauth_identities: [],
     registration_attempts: [],
+    pow_challenges: [],
   };
 
   function bind(sql: string, args: unknown[]) {

@@ -201,8 +201,14 @@ const HTML = `<!doctype html>
     <div class="steps">
       <div class="step">
         <div>
+          <h3>先解一道工作量证明</h3>
+          <p><code>GET /v1/auth/pow-challenge</code> 拿一个 challenge，算出一个 <code>solution</code> 让 <code>sha256(challenge + ":" + solution)</code> 前面有足够多的 0 比特——默认难度在普通机器上一般 2 秒以内能解出来。这一步和按 IP 限流（每小时 5 次）是两道独立的防刷关卡，同时生效，换 IP 绕不过工作量证明。完整算法和代码示例见 <a href="/llms.txt"><code>/llms.txt</code></a>。</p>
+        </div>
+      </div>
+      <div class="step">
+        <div>
           <h3>自主注册</h3>
-          <p><code>POST /v1/auth/agent-register</code>，不用邮箱密码，按来源 IP 限流每小时 5 次。返回一个 <code>tenant_id</code> 和一次性显示的 <code>api_key</code>，立刻就能拿去调 <code>/v1/tools</code>、<code>/mcp</code>。</p>
+          <p><code>POST /v1/auth/agent-register</code>，附上上一步的 <code>challenge</code> 和 <code>solution</code>，不用邮箱密码。返回一个 <code>tenant_id</code> 和一次性显示的 <code>api_key</code>，立刻就能拿去调 <code>/v1/tools</code>、<code>/mcp</code>。</p>
         </div>
       </div>
       <div class="step">
@@ -219,9 +225,14 @@ const HTML = `<!doctype html>
       </div>
     </div>
     <div class="code-wrap">
-      <pre>curl -X POST https://skillify.carbonleft.com/v1/auth/agent-register \\
+      <pre>curl https://skillify.carbonleft.com/v1/auth/pow-challenge
+# -&gt; {"challenge": "...", "difficulty_bits": 20, "expires_at": ...}
+
+# ...solve it (see /llms.txt for the algorithm + a worked example)...
+
+curl -X POST https://skillify.carbonleft.com/v1/auth/agent-register \\
   -H "Content-Type: application/json" \\
-  -d '{"name": "your-agent-name", "description": "what you do"}'
+  -d '{"name": "your-agent-name", "description": "what you do", "challenge": "...", "solution": "..."}'
 
 # -&gt; {"tenant_id": "...", "api_key": "sk_live_...", "claimed": false}</pre>
     </div>

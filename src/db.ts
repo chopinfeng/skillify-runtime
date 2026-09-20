@@ -299,3 +299,35 @@ export async function countRecentRegistrationAttempts(env: Env, ipHash: string, 
     .first<{ n: number }>();
   return row?.n ?? 0;
 }
+
+export interface PowChallengeRow {
+  id: string;
+  challenge: string;
+  difficulty_bits: number;
+  created_at: number;
+  expires_at: number;
+  consumed_at: number | null;
+}
+
+export async function insertPowChallenge(env: Env, challenge: string, difficultyBits: number, expiresAt: number): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO pow_challenges (id, challenge, difficulty_bits, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+  )
+    .bind(randomId("pow"), challenge, difficultyBits, Date.now(), expiresAt)
+    .run();
+}
+
+export async function getPowChallenge(env: Env, challenge: string): Promise<PowChallengeRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM pow_challenges WHERE challenge = ?").bind(challenge).first<PowChallengeRow>();
+  return row ?? null;
+}
+
+/** Atomic claim-and-consume: returns false if the challenge was already
+ * spent, so a solved-but-replayed challenge can never back a second
+ * registration — same pattern as claimTenant()'s race-safe UPDATE. */
+export async function consumePowChallenge(env: Env, challenge: string): Promise<boolean> {
+  const result = await env.DB.prepare("UPDATE pow_challenges SET consumed_at = ? WHERE challenge = ? AND consumed_at IS NULL")
+    .bind(Date.now(), challenge)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}

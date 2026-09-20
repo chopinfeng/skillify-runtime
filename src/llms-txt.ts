@@ -14,17 +14,50 @@ const TEXT = `# skillify-runtime
 
 ## Agent self-registration
 
-No email or password required. Rate-limited to 5 requests/hour per source IP.
+No email or password required. Two steps: solve a proof-of-work challenge,
+then register with the solution. Two independent gates apply — 5 registration
+requests/hour per source IP, AND a valid PoW solution; both must pass.
+
+**Step 1 — get a challenge:**
+
+    curl https://skillify.carbonleft.com/v1/auth/pow-challenge
+
+Returns \`{challenge, difficulty_bits, expires_at}\` (challenge expires in 5
+minutes).
+
+**Step 2 — solve it.** Find any \`solution\` string such that the SHA-256 hex
+digest of \`"<challenge>:<solution>"\` has at least \`difficulty_bits\` leading
+zero BITS (not hex characters — a hex digit only gets you 4 bits at a time,
+so check bit-by-bit within the first nonzero nibble). At the default 20-bit
+difficulty this is ~2^20 attempts, well under 2 seconds on typical hardware.
+Node.js example:
+
+    const crypto = require("crypto");
+    function leadingZeroBits(hex) {
+      for (let i = 0; i < hex.length; i++) {
+        const n = parseInt(hex[i], 16);
+        if (n !== 0) return i * 4 + Math.clz32(n) - 28;
+      }
+      return hex.length * 4;
+    }
+    let i = 0;
+    while (leadingZeroBits(crypto.createHash("sha256").update(\`\${challenge}:\${i}\`).digest("hex")) < difficulty_bits) i++;
+    const solution = String(i);
+
+**Step 3 — register with the solution:**
 
     curl -X POST https://skillify.carbonleft.com/v1/auth/agent-register \\
       -H "Content-Type: application/json" \\
-      -d '{"name": "your-agent-name", "description": "what you do"}'
+      -d '{"name": "your-agent-name", "description": "what you do", "challenge": "...", "solution": "..."}'
 
 Returns 201 with \`{tenant_id, api_key, claimed: false}\`. The \`api_key\` is
-shown once — store it. The tenant is UNCLAIMED: it has no recovery path and
-should not be relied on until a human attaches real credentials to it via
-the claim endpoint below. Numbers this project reports about its own usage
-(tenant counts, call counts) only include claimed tenants.
+shown once — store it. A wrong solution returns 400 without consuming the
+challenge, so you can retry the same challenge; a used or expired one needs a
+fresh \`GET /v1/auth/pow-challenge\`. The tenant is UNCLAIMED: it has no
+recovery path and should not be relied on until a human attaches real
+credentials to it via the claim endpoint below. Numbers this project reports
+about its own usage (tenant counts, call counts) only include claimed
+tenants.
 
 ## Claim (attach a human identity)
 
@@ -42,6 +75,9 @@ or if a claim by someone else raced and won.
 
 ## Using the platform (once you have an api_key)
 
+- \`GET /v1/auth/me\` — who am I. Session cookie ONLY (not Bearer <api_key> —
+  an unclaimed tenant has no user/session, so this only works after claim).
+  Returns \`{user_id, email, tenant_id}\`.
 - \`GET /v1/tools\` — action catalog with input schemas (no auth required).
 - \`GET /v1/connected-accounts\` / \`POST /v1/connected-accounts\` — manage
   credentials for downstream platforms (Bearer <api_key> or session cookie).

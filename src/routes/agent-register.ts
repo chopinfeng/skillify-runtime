@@ -1,12 +1,15 @@
 import type { Env } from "../types";
 import { createTenantApiKey, createTenantWithDek } from "../db";
 import { checkAndRecordRegistrationAttempt } from "../lib/rate-limit";
+import { verifyAndConsumePow } from "../lib/pow";
 
 const MAX_LABEL_LENGTH = 200;
 
 interface AgentRegisterRequest {
   name?: string;
   description?: string;
+  challenge?: string;
+  solution?: string;
 }
 
 /** Open, unauthenticated registration for an Agent to call directly — no
@@ -17,15 +20,25 @@ interface AgentRegisterRequest {
  * POST /v1/auth/claim — see migrations/0005_agent_registration.sql for why:
  * an open registration endpoint with no downstream distinction between
  * real and self-registered accounts is exactly how Moltbook's usage
- * numbers reportedly ended up ~99% fake. Rate-limited per IP for the same
- * reason — this project has never described its numbers as anything but
- * exactly what they are, and an easily-scriptable free-tenant mill would
- * make that harder to keep true. */
+ * numbers reportedly ended up ~99% fake. Gated two ways, deliberately
+ * different threat models: per-IP rate limiting (cheap to bypass with
+ * rotating IPs, but free) and a proof-of-work challenge from
+ * GET /v1/auth/pow-challenge (IP-agnostic, but costs real compute per
+ * attempt) — see migrations/0006_pow_challenges.sql. */
 export async function handleAgentRegister(request: Request, env: Env): Promise<Response> {
   const allowed = await checkAndRecordRegistrationAttempt(request, env);
   if (!allowed) return Response.json({ error: "too many registrations from this address, try again later" }, { status: 429 });
 
   const body = (await request.json().catch(() => ({}))) as AgentRegisterRequest;
+
+  const pow = await verifyAndConsumePow(env, body.challenge ?? "", body.solution ?? "");
+  if (!pow.ok) {
+    return Response.json(
+      { error: pow.error, pow_hint: "GET /v1/auth/pow-challenge first, solve it, then include {challenge, solution} in this request." },
+      { status: 400 },
+    );
+  }
+
   const label = [body.name, body.description]
     .filter(Boolean)
     .join(" — ")
