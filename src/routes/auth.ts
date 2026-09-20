@@ -16,7 +16,7 @@ interface Credentials {
  * here, same as the admin bootstrap route (routes/tenants.ts) — there's no
  * console yet to look it up again later. */
 export async function handleSignup(request: Request, env: Env): Promise<Response> {
-  const body = (await request.json()) as Credentials;
+  const body = (await request.json().catch(() => ({}))) as Credentials;
   const email = body.email?.trim().toLowerCase();
   if (!email || !EMAIL_RE.test(email)) return Response.json({ error: "a valid email is required" }, { status: 400 });
   if (!body.password || body.password.length < MIN_PASSWORD_LENGTH) {
@@ -36,7 +36,7 @@ export async function handleSignup(request: Request, env: Env): Promise<Response
 }
 
 export async function handleLogin(request: Request, env: Env): Promise<Response> {
-  const body = (await request.json()) as Credentials;
+  const body = (await request.json().catch(() => ({}))) as Credentials;
   const email = body.email?.trim().toLowerCase();
 
   // Same 401 whether the email doesn't exist or the password is wrong —

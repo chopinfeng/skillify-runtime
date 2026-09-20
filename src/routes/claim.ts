@@ -1,6 +1,6 @@
 import type { Env } from "../types";
 import { claimTenant, createUser, getUserByEmail } from "../db";
-import { authenticateTenant } from "../lib/auth";
+import { authenticateTenantByApiKey } from "../lib/auth";
 import { hashPassword } from "../lib/password";
 import { createSessionCookie } from "../lib/session";
 import { EMAIL_RE, MIN_PASSWORD_LENGTH } from "./auth";
@@ -11,17 +11,18 @@ interface ClaimRequest {
 }
 
 /** Attaches a real human identity to a tenant that registered itself via
- * POST /v1/auth/agent-register. Authenticated the same way as the REST
- * resource routes (Bearer tenant API key) rather than a session — proof of
- * possessing that specific tenant's key is exactly the right bar here: it's
- * the same credential the agent was handed at registration, so claiming
- * requires nothing an unrelated third party could plausibly have. */
+ * POST /v1/auth/agent-register. Bearer-API-key-only (authenticateTenantByApiKey,
+ * not the session-accepting authenticateTenant) — proof of possessing that
+ * specific tenant's key is exactly the right bar here: it's the same
+ * credential the agent was handed at registration, so claiming requires
+ * nothing an unrelated third party could plausibly have, and nothing an
+ * already-logged-in caller could reach for a tenant that isn't theirs. */
 export async function handleClaim(request: Request, env: Env): Promise<Response> {
-  const tenant = await authenticateTenant(request, env);
+  const tenant = await authenticateTenantByApiKey(request, env);
   if (!tenant) return Response.json({ error: "unauthorized" }, { status: 401 });
   if (tenant.claimed_by_user_id) return Response.json({ error: "this tenant is already claimed" }, { status: 409 });
 
-  const body = (await request.json()) as ClaimRequest;
+  const body = (await request.json().catch(() => ({}))) as ClaimRequest;
   const email = body.email?.trim().toLowerCase();
   if (!email || !EMAIL_RE.test(email)) return Response.json({ error: "a valid email is required" }, { status: 400 });
   if (!body.password || body.password.length < MIN_PASSWORD_LENGTH) {

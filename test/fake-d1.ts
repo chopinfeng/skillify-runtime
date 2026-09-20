@@ -1,7 +1,8 @@
 /**
  * Minimal in-memory stand-in for D1, covering just the query shapes db.ts
- * actually issues (single-table INSERT/SELECT/UPDATE with an ANDed WHERE of
- * `col = ?` / `col IS NULL`, plus the one JOIN query). Not a SQL engine —
+ * actually issues (single-table INSERT/SELECT/UPDATE/DELETE with an ANDed
+ * WHERE of `col = ?` / `col IS NULL` / `col < ?` / `col >= ?`, a bare
+ * `COUNT(*) as <alias>` select, plus the one JOIN query). Not a SQL engine —
  * each condition is matched generically against row data rather than
  * hardcoded per query, so a future edit that changes a WHERE clause (e.g.
  * accidentally drops a `tenant_id = ?` guard) still exercises real
@@ -13,7 +14,7 @@ type Row = Record<string, unknown>;
 
 interface Condition {
   col: string;
-  op: "eq" | "isnull";
+  op: "eq" | "isnull" | "lt" | "gte";
   val?: unknown;
 }
 
@@ -28,13 +29,22 @@ function parseConditions(whereClause: string, args: unknown[], startIdx: number)
     if (isNull) return { col: isNull[1], op: "isnull" };
     const eq = clause.match(/^(\w+)\s*=\s*\?$/);
     if (eq) return { col: eq[1], op: "eq", val: args[i++] };
+    const lt = clause.match(/^(\w+)\s*<\s*\?$/);
+    if (lt) return { col: lt[1], op: "lt", val: args[i++] };
+    const gte = clause.match(/^(\w+)\s*>=\s*\?$/);
+    if (gte) return { col: gte[1], op: "gte", val: args[i++] };
     throw new Error(`fake-d1: unsupported WHERE condition "${clause}"`);
   });
   return { conditions, nextIdx: i };
 }
 
 function rowMatches(row: Row, conditions: Condition[]): boolean {
-  return conditions.every((c) => (c.op === "isnull" ? row[c.col] == null : row[c.col] === c.val));
+  return conditions.every((c) => {
+    if (c.op === "isnull") return row[c.col] == null;
+    if (c.op === "lt") return (row[c.col] as number) < (c.val as number);
+    if (c.op === "gte") return (row[c.col] as number) >= (c.val as number);
+    return row[c.col] === c.val;
+  });
 }
 
 export function createFakeD1() {
@@ -84,6 +94,15 @@ export function createFakeD1() {
         return { meta: { changes } };
       }
 
+      const del = norm.match(/^DELETE FROM (\w+) WHERE (.+)$/i);
+      if (del) {
+        const [, table, whereClause] = del;
+        const { conditions } = parseConditions(whereClause, args, 0);
+        const before = (tables[table] ?? []).length;
+        tables[table] = (tables[table] ?? []).filter((row) => !rowMatches(row, conditions));
+        return { meta: { changes: before - tables[table].length } };
+      }
+
       throw new Error(`fake-d1: unsupported statement for run(): ${norm}`);
     }
 
@@ -100,9 +119,10 @@ export function createFakeD1() {
         return tenant ? [tenant] : [];
       }
 
-      const select = norm.match(/^SELECT (?:.+?) FROM (\w+)(?: WHERE (.+))?$/i);
+      const select = norm.match(/^SELECT (.+?) FROM (\w+)(?: WHERE (.+))?$/i);
       if (!select) throw new Error(`fake-d1: unsupported statement for select: ${norm}`);
-      const [, table, rest] = select;
+      const [, columns, table, rest] = select;
+      const countAlias = columns.match(/^COUNT\(\*\)\s+as\s+(\w+)$/i)?.[1];
       let body = rest ?? "";
       let orderCol: string | null = null;
       let orderDesc = false;
@@ -139,6 +159,7 @@ export function createFakeD1() {
       void argIdx;
 
       let rows = (tables[table] ?? []).filter((row) => rowMatches(row, conditions));
+      if (countAlias) return [{ [countAlias]: rows.length }];
       if (orderCol) {
         rows = [...rows].sort((a, b) => {
           const av = a[orderCol as string] as number;

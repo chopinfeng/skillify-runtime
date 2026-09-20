@@ -12,14 +12,17 @@ describe("proof-of-work registration gate", () => {
     env = { DB: createFakeD1() as unknown as Env["DB"] } as Env;
   });
 
+  let seedCounter = 0;
+
   /** Inserts a challenge directly at a deliberately low difficulty so tests
    * don't have to actually burn CPU solving the real ~2^20-attempt target
    * used in production (that's exercised for real via issuePowChallenge's
-   * shape below, just not solved here). */
+   * shape below, just not solved here). Each call gets a distinct challenge
+   * string so a test can seed more than one without them colliding. */
   async function seedChallenge(difficultyBits: number, expiresAt = Date.now() + 60_000): Promise<string> {
-    const challenge = "test-challenge";
+    const challenge = `test-challenge-${seedCounter++}`;
     (env.DB as unknown as { tables: Record<string, Record<string, unknown>[]> }).tables.pow_challenges.push({
-      id: "pow_test",
+      id: `pow_test_${challenge}`,
       challenge,
       difficulty_bits: difficultyBits,
       created_at: Date.now(),
@@ -87,5 +90,21 @@ describe("proof-of-work registration gate", () => {
     const solution = await bruteForce(challenge, 4);
     const retry = await verifyAndConsumePow(env, challenge, solution);
     expect(retry.ok).toBe(true);
+  });
+
+  it("rejects an oversized challenge or solution without a database lookup", async () => {
+    const result = await verifyAndConsumePow(env, "x".repeat(1000), "y".repeat(1000));
+    expect(result).toEqual({ ok: false, error: expect.stringContaining("longer than any real one") });
+  });
+
+  it("sweeps expired challenges (solved or not) on every new issuance, so the free issuance endpoint can't grow the table without bound", async () => {
+    const expiredUnsolved = await seedChallenge(0, Date.now() - 1000);
+    const stillLive = await seedChallenge(0, Date.now() + 60_000);
+    await issuePowChallenge(env);
+
+    const tables = (env.DB as unknown as { tables: Record<string, { challenge: string }[]> }).tables;
+    const remaining = tables.pow_challenges.map((r) => r.challenge);
+    expect(remaining).not.toContain(expiredUnsolved);
+    expect(remaining).toContain(stillLive);
   });
 });

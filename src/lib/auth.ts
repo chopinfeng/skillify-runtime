@@ -4,6 +4,15 @@ import { getTenantByApiKey } from "../db";
 import { resolveSession } from "./session";
 import { sha256Hex } from "./crypto";
 
+/** Resolves a tenant from an `Authorization: Bearer <api key>` header only —
+ * no session fallback. */
+async function tenantFromApiKey(request: Request, env: Env): Promise<TenantRow | null> {
+  const header = request.headers.get("authorization") ?? "";
+  const match = header.match(/^Bearer (.+)$/);
+  if (!match) return null;
+  return getTenantByApiKey(env, match[1]);
+}
+
 /** Resolves the calling tenant for the REST/MCP-style resource routes
  * (connected accounts, execute, audit log). Accepts either credential:
  * a tenant API key (`Authorization: Bearer <key>` — programmatic callers,
@@ -11,14 +20,21 @@ import { sha256Hex } from "./crypto";
  * the same endpoints). Both identify "which tenant", just via different
  * doors; a session cookie resolves to that user's own tenant. */
 export async function authenticateTenant(request: Request, env: Env): Promise<TenantRow | null> {
-  const header = request.headers.get("authorization") ?? "";
-  const match = header.match(/^Bearer (.+)$/);
-  if (match) {
-    const tenant = await getTenantByApiKey(env, match[1]);
-    if (tenant) return tenant;
-  }
+  const viaKey = await tenantFromApiKey(request, env);
+  if (viaKey) return viaKey;
   const session = await resolveSession(request, env);
   return session?.tenant ?? null;
+}
+
+/** Bearer-API-key-only resolution, for routes like claim where the point is
+ * proving possession of *this specific tenant's* own key — not just being
+ * logged in as some user. A session cookie always resolves to the caller's
+ * own, already-claimed tenant, so accepting one here would be harmless in
+ * practice (claim's own already-claimed check would 409 it) — but this
+ * makes that invariant explicit and enforced in code rather than relying on
+ * it as a side effect of a different check. */
+export async function authenticateTenantByApiKey(request: Request, env: Env): Promise<TenantRow | null> {
+  return tenantFromApiKey(request, env);
 }
 
 /** Compares two strings in constant time by hashing both to fixed-length

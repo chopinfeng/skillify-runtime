@@ -331,3 +331,12 @@ export async function consumePowChallenge(env: Env, challenge: string): Promise<
     .run();
   return (result.meta.changes ?? 0) > 0;
 }
+
+/** Sweeps every expired challenge (solved or not) so the free, unauthenticated
+ * GET /v1/auth/pow-challenge endpoint can't grow this table without bound —
+ * called on every issuance rather than on a schedule, since there's no cron
+ * primitive here and this keeps steady-state size proportional to recent
+ * issuance volume without needing one. */
+export async function deleteExpiredPowChallenges(env: Env, nowMs: number): Promise<void> {
+  await env.DB.prepare("DELETE FROM pow_challenges WHERE expires_at < ?").bind(nowMs).run();
+}

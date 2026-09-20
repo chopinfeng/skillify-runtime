@@ -1,6 +1,6 @@
 import type { Env } from "../types";
 import { createTenantApiKey, createTenantWithDek } from "../db";
-import { checkAndRecordRegistrationAttempt } from "../lib/rate-limit";
+import { isRegistrationRateLimited, recordRegistrationAttempt } from "../lib/rate-limit";
 import { verifyAndConsumePow } from "../lib/pow";
 
 const MAX_LABEL_LENGTH = 200;
@@ -24,10 +24,19 @@ interface AgentRegisterRequest {
  * different threat models: per-IP rate limiting (cheap to bypass with
  * rotating IPs, but free) and a proof-of-work challenge from
  * GET /v1/auth/pow-challenge (IP-agnostic, but costs real compute per
- * attempt) — see migrations/0006_pow_challenges.sql. */
+ * attempt) — see migrations/0006_pow_challenges.sql.
+ *
+ * The rate-limit check and the debit are deliberately separate calls: the
+ * quota is only spent once a valid PoW solution is in hand, not on every
+ * request that reaches this handler. Debiting up front would mean a caller
+ * iterating on a broken PoW implementation burns its whole hourly budget on
+ * requests that were never going to produce a tenant, and gets rate-limited
+ * for an hour while still debugging — exactly the audience this endpoint
+ * exists for. */
 export async function handleAgentRegister(request: Request, env: Env): Promise<Response> {
-  const allowed = await checkAndRecordRegistrationAttempt(request, env);
-  if (!allowed) return Response.json({ error: "too many registrations from this address, try again later" }, { status: 429 });
+  if (await isRegistrationRateLimited(request, env)) {
+    return Response.json({ error: "too many registrations from this address, try again later" }, { status: 429 });
+  }
 
   const body = (await request.json().catch(() => ({}))) as AgentRegisterRequest;
 
@@ -38,6 +47,7 @@ export async function handleAgentRegister(request: Request, env: Env): Promise<R
       { status: 400 },
     );
   }
+  await recordRegistrationAttempt(request, env);
 
   const label = [body.name, body.description]
     .filter(Boolean)
